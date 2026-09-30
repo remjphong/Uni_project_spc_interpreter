@@ -1,14 +1,6 @@
-#include "parser.h"
-
-BinaryOpNode::BinaryOpNode(std::unique_ptr<ASTNode> left_node, std::string op_val, std::unique_ptr<ASTNode> right_node)
-    : left(std::move(left_node)), op(std::move(op_val)), right(std::move(right_node)) {}
-
-NumberNode::NumberNode(double val) : value(val) {}
-
-VariableNode::VariableNode(std::string var_name) : name(std::move(var_name)) {}
-
-AssignNode::AssignNode(std::string name, std::unique_ptr<ASTNode> expression, bool is_decl)
-    : var_name(std::move(name)), expr(std::move(expression)), is_declaration(is_decl) {}
+#include "Parser.h"
+#include <stdexcept>
+#include <utility>
 
 Parser::Parser(std::vector<Token> token_list) 
     : tokens(std::move(token_list)), current_idx(0) {}
@@ -72,7 +64,7 @@ std::unique_ptr<ASTNode> Parser::statement() {
     const Token* next = peekNext();
     if (current && current->type == TOKEN_IDENTIFIER && next && next->type == OPERATOR_ASSIGN) {
         std::string var_name = advance()->lexeme;
-        advance(); // Ăn dấu '='
+        advance(); // Bỏ qua dấu '='
         auto expr = expression();
         consume(PUNCT_SEMICOLON, "Thieu dau ';' cuoi cau lenh");
         return std::make_unique<AssignNode>(std::move(var_name), std::move(expr), false);
@@ -140,31 +132,4 @@ std::unique_ptr<ASTNode> Parser::expression() {
         }
     }
     return node;
-}
-
-void print_ast(const ASTNode* node, std::string indent, bool last) {
-    if (!node) return;
-
-    std::string connector = last ? "└── " : "├── ";
-
-    if (const NumberNode* num_node = dynamic_cast<const NumberNode*>(node)) {
-        std::cout << indent << connector << num_node->value << "\n";
-    } 
-    else if (const VariableNode* var_node = dynamic_cast<const VariableNode*>(node)) {
-        std::cout << indent << connector << "Var(" << var_node->name << ")\n";
-    }
-    else if (const AssignNode* assign_node = dynamic_cast<const AssignNode*>(node)) {
-        std::cout << indent << connector << (assign_node->is_declaration ? "VarDecl(" : "Assign(") 
-                  << assign_node->var_name << " =)\n";
-
-        std::string new_indent = indent + (last ? "    " : "│   ");
-        print_ast(assign_node->expr.get(), new_indent, true);
-    }
-    else if (const BinaryOpNode* bin_node = dynamic_cast<const BinaryOpNode*>(node)) {
-        std::cout << indent << connector << bin_node->op << "\n";
-
-        std::string new_indent = indent + (last ? "    " : "│   ");
-        print_ast(bin_node->left.get(), new_indent, false);
-        print_ast(bin_node->right.get(), new_indent, true);
-    }
 }
