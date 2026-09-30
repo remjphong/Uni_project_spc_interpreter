@@ -7,11 +7,20 @@
 #include <stdexcept>
 #include <iostream>
 
-struct Token {
-    std::string type;   
-    std::string value;
+enum TokenType {
+    KW_VAR, KW_IF, KW_ELSE, KW_WHILE, KW_RETURN,
+    TOKEN_IDENTIFIER, TOKEN_NUMBER,
+    OPERATOR_PLUS, OPERATOR_MINUS, OPERATOR_MULTIPLY, OPERATOR_DIVIDE,
+    OPERATOR_ASSIGN, OPERATOR_EQUAL,
+    PUNCT_SEMICOLON, PUNCT_LPAREN, PUNCT_RPAREN,
+    TOKEN_EOF, TOKEN_ERROR
+};
 
-    std::string to_string() const;
+struct Token {
+    TokenType type;
+    std::string lexeme;
+    int line;
+    int column;
 };
 
 class ASTNode {
@@ -34,20 +43,19 @@ public:
     NumberNode(double val);
 };
 
-// Node cho biến 
 class VariableNode : public ASTNode {
 public:
     std::string name;
     VariableNode(std::string var_name);
 };
 
-// Node cho phép gán 
 class AssignNode : public ASTNode {
 public:
     std::string var_name;
     std::unique_ptr<ASTNode> expr;
+    bool is_declaration; // Đánh dấu có từ khóa 'var' hay không
 
-    AssignNode(std::string name, std::unique_ptr<ASTNode> expression);
+    AssignNode(std::string name, std::unique_ptr<ASTNode> expression, bool is_decl = false);
 };
 
 class Parser {
@@ -56,19 +64,19 @@ private:
     std::size_t current_idx;
 
 public:
-    Parser(const std::vector<Token>& token_list);
+    Parser(std::vector<Token> token_list);
 
-    const Token* peek();
-    const Token* peek_next(); // Nhìn trước 2 token để kiểm tra dấu '='
+    const Token* peek() const;
+    const Token* peekNext() const;
     const Token* advance();
-    const Token* match(const std::string& expected_type);
-    const Token* consume(const std::string& expected_type, const std::string& error_message);
+    const Token* match(TokenType expected_type);
+    const Token* consume(TokenType expected_type, const std::string& error_message);
 
-    // Điểm bắt đầu parse: có thể là phép gán hoặc một biểu thức
+    // Cú pháp phân cấp
     std::unique_ptr<ASTNode> statement(); 
-    std::unique_ptr<ASTNode> factor();
-    std::unique_ptr<ASTNode> term();
     std::unique_ptr<ASTNode> expression();
+    std::unique_ptr<ASTNode> term();
+    std::unique_ptr<ASTNode> factor();
 };
 
 void print_ast(const ASTNode* node, std::string indent = "", bool last = true);

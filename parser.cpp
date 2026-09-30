@@ -1,11 +1,5 @@
 #include "parser.h"
 
-// Token 
-std::string Token::to_string() const {
-    return "Token(type=" + type + ", value=" + value + ")";
-}
-
-// AST Nodes 
 BinaryOpNode::BinaryOpNode(std::unique_ptr<ASTNode> left_node, std::string op_val, std::unique_ptr<ASTNode> right_node)
     : left(std::move(left_node)), op(std::move(op_val)), right(std::move(right_node)) {}
 
@@ -13,21 +7,20 @@ NumberNode::NumberNode(double val) : value(val) {}
 
 VariableNode::VariableNode(std::string var_name) : name(std::move(var_name)) {}
 
-AssignNode::AssignNode(std::string name, std::unique_ptr<ASTNode> expression)
-    : var_name(std::move(name)), expr(std::move(expression)) {}
+AssignNode::AssignNode(std::string name, std::unique_ptr<ASTNode> expression, bool is_decl)
+    : var_name(std::move(name)), expr(std::move(expression)), is_declaration(is_decl) {}
 
-// Parser 
-Parser::Parser(const std::vector<Token>& token_list) : tokens(token_list), current_idx(0) {}
+Parser::Parser(std::vector<Token> token_list) 
+    : tokens(std::move(token_list)), current_idx(0) {}
 
-const Token* Parser::peek() {
+const Token* Parser::peek() const {
     if (current_idx < tokens.size()) {
         return &tokens[current_idx];
     }
     return nullptr;
 }
 
-// Hàm nhìn trước 1 token phía sau (Lookahead = 2)
-const Token* Parser::peek_next() {
+const Token* Parser::peekNext() const {
     if (current_idx + 1 < tokens.size()) {
         return &tokens[current_idx + 1];
     }
@@ -36,13 +29,13 @@ const Token* Parser::peek_next() {
 
 const Token* Parser::advance() {
     const Token* token = peek();
-    if (token) {
+    if (token && token->type != TOKEN_EOF) {
         current_idx++;
     }
     return token;
 }
 
-const Token* Parser::match(const std::string& expected_type) {
+const Token* Parser::match(TokenType expected_type) {
     const Token* token = peek();
     if (token != nullptr && token->type == expected_type) {
         return advance();
@@ -50,72 +43,83 @@ const Token* Parser::match(const std::string& expected_type) {
     return nullptr;
 }
 
-const Token* Parser::consume(const std::string& expected_type, const std::string& error_message) {
+const Token* Parser::consume(TokenType expected_type, const std::string& error_message) {
     const Token* token = match(expected_type);
     if (!token) {
         const Token* current = peek();
-        std::string err_token = current ? current->to_string() : "EOF";
-        throw std::runtime_error("Error at token " + err_token + ": " + error_message);
+        std::string err_pos = current ? ("dong " + std::to_string(current->line) + ", cot " + std::to_string(current->column)) : "EOF";
+        throw std::runtime_error("Loi cu phap tai " + err_pos + ": " + error_message);
     }
     return token;
 }
 
-// Parse phép gán 
+// Xử lý câu lệnh: var x = ...; hoặc x = ...; hoặc biểu thức đơn thuần
 std::unique_ptr<ASTNode> Parser::statement() {
-    const Token* current = peek();
-    const Token* next = peek_next();
+    bool is_decl = false;
 
-    if (current && current->type == "IDENTIFIER" && next && next->type == "ASSIGN") {
-        std::string var_name = advance()->value; // Lấy tên biến
-        advance();                              // Bỏ qua dấu '='
-        auto expr = expression();               // Parse biểu thức bên phải
-        return std::make_unique<AssignNode>(std::move(var_name), std::move(expr));
+    // Trường hợp 1: Có từ khóa 'var' (ví dụ: var x = 10;)
+    if (match(KW_VAR)) {
+        is_decl = true;
+        const Token* id = consume(TOKEN_IDENTIFIER, "Can ten bien sau tu khoa 'var'");
+        consume(OPERATOR_ASSIGN, "Can dau '=' sau ten bien");
+        auto expr = expression();
+        consume(PUNCT_SEMICOLON, "Thieu dau ';' cuoi cau lenh");
+        return std::make_unique<AssignNode>(id->lexeme, std::move(expr), is_decl);
     }
 
-    // Nếu không phải phép gán, coi nó là biểu thức thông thường
-    return expression();
+    // Trường hợp 2: Gán lại biến (ví dụ: x = 10;)
+    const Token* current = peek();
+    const Token* next = peekNext();
+    if (current && current->type == TOKEN_IDENTIFIER && next && next->type == OPERATOR_ASSIGN) {
+        std::string var_name = advance()->lexeme;
+        advance(); // Ăn dấu '='
+        auto expr = expression();
+        consume(PUNCT_SEMICOLON, "Thieu dau ';' cuoi cau lenh");
+        return std::make_unique<AssignNode>(std::move(var_name), std::move(expr), false);
+    }
+
+    // Trường hợp 3: Biểu thức thông thường
+    auto expr = expression();
+    if (peek() && peek()->type == PUNCT_SEMICOLON) {
+        advance(); // Bỏ qua dấu ';' nếu có
+    }
+    return expr;
 }
 
 std::unique_ptr<ASTNode> Parser::factor() {
     const Token* token = peek();
-    if (!token) throw std::runtime_error("Unexpected EOF");
-
-    // Xử lý số
-    if (const Token* num_token = match("NUMBER")) {
-        return std::make_unique<NumberNode>(std::stod(num_token->value)); 
+    if (!token || token->type == TOKEN_EOF) {
+        throw std::runtime_error("Ket thuc file dot ngot (Unexpected EOF)");
     }
 
-    // Xử lý biến trong biểu thức 
-    if (const Token* id_token = match("IDENTIFIER")) {
-        return std::make_unique<VariableNode>(id_token->value);
+    // Hằng số (Number)
+    if (match(TOKEN_NUMBER)) {
+        return std::make_unique<NumberNode>(std::stod(token->lexeme));
     }
 
-    // Xử lý dấu ngoặc ()
-    if (match("LPAREN")) {
+    // Tên biến (Identifier)
+    if (match(TOKEN_IDENTIFIER)) {
+        return std::make_unique<VariableNode>(token->lexeme);
+    }
+
+    // Dấu ngoặc tròn ( ... )
+    if (match(PUNCT_LPAREN)) {
         auto node = expression();
-        consume("RPAREN", "Expected ')' after expression");
+        consume(PUNCT_RPAREN, "Thieu dau dong ngoac ')' sau bieu thuc");
         return node;
     }
-    // xử lý dấu trừ ở đầu
-    if (match("MINUS")) {
-        auto right = factor();
-        return std::make_unique<BinaryOpNode>(
-            std::make_unique<NumberNode>(0), "-", std::move(right)
-        );
-    }
 
-    throw std::runtime_error("Unexpected token: " + token->to_string());
+    throw std::runtime_error("Token khong hop le: '" + token->lexeme + "'");
 }
 
 std::unique_ptr<ASTNode> Parser::term() {
     auto node = factor();
 
     while (const Token* token = peek()) {
-        if (token->type == "MULTIPLY" || token->type == "DIVIDE") {
+        if (token->type == OPERATOR_MULTIPLY || token->type == OPERATOR_DIVIDE) {
             const Token* op_token = advance();
             auto right_node = factor();
-            
-            node = std::make_unique<BinaryOpNode>(std::move(node), op_token->value, std::move(right_node));
+            node = std::make_unique<BinaryOpNode>(std::move(node), op_token->lexeme, std::move(right_node));
         } else {
             break;
         }
@@ -127,11 +131,10 @@ std::unique_ptr<ASTNode> Parser::expression() {
     auto node = term();
 
     while (const Token* token = peek()) {
-        if (token->type == "PLUS" || token->type == "MINUS") {
+        if (token->type == OPERATOR_PLUS || token->type == OPERATOR_MINUS) {
             const Token* op_token = advance();
             auto right_node = term();
-            
-            node = std::make_unique<BinaryOpNode>(std::move(node), op_token->value, std::move(right_node));
+            node = std::make_unique<BinaryOpNode>(std::move(node), op_token->lexeme, std::move(right_node));
         } else {
             break;
         }
@@ -139,7 +142,6 @@ std::unique_ptr<ASTNode> Parser::expression() {
     return node;
 }
 
-// in cây ast
 void print_ast(const ASTNode* node, std::string indent, bool last) {
     if (!node) return;
 
@@ -152,17 +154,16 @@ void print_ast(const ASTNode* node, std::string indent, bool last) {
         std::cout << indent << connector << "Var(" << var_node->name << ")\n";
     }
     else if (const AssignNode* assign_node = dynamic_cast<const AssignNode*>(node)) {
-        std::cout << indent << connector << "Assign(" << assign_node->var_name << " =)\n";
+        std::cout << indent << connector << (assign_node->is_declaration ? "VarDecl(" : "Assign(") 
+                  << assign_node->var_name << " =)\n";
 
         std::string new_indent = indent + (last ? "    " : "│   ");
-        // Biểu thức gán chỉ có 1 nhánh con bên phải (expr)
         print_ast(assign_node->expr.get(), new_indent, true);
     }
     else if (const BinaryOpNode* bin_node = dynamic_cast<const BinaryOpNode*>(node)) {
         std::cout << indent << connector << bin_node->op << "\n";
 
         std::string new_indent = indent + (last ? "    " : "│   ");
-
         print_ast(bin_node->left.get(), new_indent, false);
         print_ast(bin_node->right.get(), new_indent, true);
     }
