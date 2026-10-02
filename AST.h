@@ -3,8 +3,8 @@
 #include <any>
 #include <memory>
 #include <string>
-#include <vector>
 #include <utility>
+#include <vector>
 #include "Token.h"
 
 class ExprVisitor;
@@ -87,8 +87,8 @@ struct Expr::Assign : Expr {
     Assign(Token n, std::shared_ptr<Expr> v)
         : name(std::move(n)), value(std::move(v)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitAssignExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitAssignExpr(*this);
     }
 };
 
@@ -97,11 +97,16 @@ struct Expr::Binary : Expr {
     Token op;
     std::shared_ptr<Expr> right;
 
-    Binary(std::shared_ptr<Expr> l, Token o, std::shared_ptr<Expr> r)
-        : left(std::move(l)), op(std::move(o)), right(std::move(r)) {}
+    Binary(
+        std::shared_ptr<Expr> l,
+        Token o,
+        std::shared_ptr<Expr> r)
+        : left(std::move(l)),
+          op(std::move(o)),
+          right(std::move(r)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitBinaryExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitBinaryExpr(*this);
     }
 };
 
@@ -113,11 +118,13 @@ struct Expr::Call : Expr {
     Call(
         std::shared_ptr<Expr> c,
         Token p,
-        std::vector<std::shared_ptr<Expr>> a
-    ) : callee(std::move(c)), paren(std::move(p)), arguments(std::move(a)) {}
+        std::vector<std::shared_ptr<Expr>> a)
+        : callee(std::move(c)),
+          paren(std::move(p)),
+          arguments(std::move(a)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitCallExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitCallExpr(*this);
     }
 };
 
@@ -128,8 +135,8 @@ struct Expr::Get : Expr {
     Get(std::shared_ptr<Expr> o, Token n)
         : object(std::move(o)), name(std::move(n)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitGetExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitGetExpr(*this);
     }
 };
 
@@ -139,8 +146,8 @@ struct Expr::Grouping : Expr {
     explicit Grouping(std::shared_ptr<Expr> e)
         : expression(std::move(e)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitGroupingExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitGroupingExpr(*this);
     }
 };
 
@@ -150,8 +157,8 @@ struct Expr::Literal : Expr {
     explicit Literal(std::any v)
         : value(std::move(v)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitLiteralExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitLiteralExpr(*this);
     }
 };
 
@@ -163,11 +170,13 @@ struct Expr::Logical : Expr {
     Logical(
         std::shared_ptr<Expr> l,
         Token o,
-        std::shared_ptr<Expr> r
-    ) : left(std::move(l)), op(std::move(o)), right(std::move(r)) {}
+        std::shared_ptr<Expr> r)
+        : left(std::move(l)),
+          op(std::move(o)),
+          right(std::move(r)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitLogicalExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitLogicalExpr(*this);
     }
 };
 
@@ -179,11 +188,13 @@ struct Expr::Set : Expr {
     Set(
         std::shared_ptr<Expr> o,
         Token n,
-        std::shared_ptr<Expr> v
-    ) : object(std::move(o)), name(std::move(n)), value(std::move(v)) {}
+        std::shared_ptr<Expr> v)
+        : object(std::move(o)),
+          name(std::move(n)),
+          value(std::move(v)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitSetExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitSetExpr(*this);
     }
 };
 
@@ -194,8 +205,8 @@ struct Expr::Super : Expr {
     Super(Token k, Token m)
         : keyword(std::move(k)), method(std::move(m)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitSuperExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitSuperExpr(*this);
     }
 };
 
@@ -205,8 +216,8 @@ struct Expr::This : Expr {
     explicit This(Token k)
         : keyword(std::move(k)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitThisExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitThisExpr(*this);
     }
 };
 
@@ -217,8 +228,8 @@ struct Expr::Unary : Expr {
     Unary(Token o, std::shared_ptr<Expr> r)
         : op(std::move(o)), right(std::move(r)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitUnaryExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitUnaryExpr(*this);
     }
 };
 
@@ -228,8 +239,8 @@ struct Expr::Variable : Expr {
     explicit Variable(Token n)
         : name(std::move(n)) {}
 
-    std::any accept(ExprVisitor& v) override {
-        return v.visitVariableExpr(*this);
+    std::any accept(ExprVisitor& visitor) override {
+        return visitor.visitVariableExpr(*this);
     }
 };
 
@@ -241,37 +252,8 @@ struct Stmt::Block : Stmt {
     explicit Block(std::vector<std::shared_ptr<Stmt>> s)
         : statements(std::move(s)) {}
 
-    void accept(StmtVisitor& v) override {
-        v.visitBlockStmt(*this);
-    }
-};
-
-struct Stmt::Class : Stmt {
-    Token name;
-    std::shared_ptr<Expr::Variable> superclass;
-    std::vector<Stmt::Function> methods;
-
-    Class(
-        Token n,
-        std::shared_ptr<Expr::Variable> s,
-        std::vector<Stmt::Function> m
-    ) : name(std::move(n)),
-        superclass(std::move(s)),
-        methods(std::move(m)) {}
-
-    void accept(StmtVisitor& v) override {
-        v.visitClassStmt(*this);
-    }
-};
-
-struct Stmt::Expression : Stmt {
-    std::shared_ptr<Expr> expression;
-
-    explicit Expression(std::shared_ptr<Expr> e)
-        : expression(std::move(e)) {}
-
-    void accept(StmtVisitor& v) override {
-        v.visitExpressionStmt(*this);
+    void accept(StmtVisitor& visitor) override {
+        visitor.visitBlockStmt(*this);
     }
 };
 
@@ -283,13 +265,42 @@ struct Stmt::Function : Stmt {
     Function(
         Token n,
         std::vector<Token> p,
-        std::vector<std::shared_ptr<Stmt>> b
-    ) : name(std::move(n)),
-        params(std::move(p)),
-        body(std::move(b)) {}
+        std::vector<std::shared_ptr<Stmt>> b)
+        : name(std::move(n)),
+          params(std::move(p)),
+          body(std::move(b)) {}
 
-    void accept(StmtVisitor& v) override {
-        v.visitFunctionStmt(*this);
+    void accept(StmtVisitor& visitor) override {
+        visitor.visitFunctionStmt(*this);
+    }
+};
+
+struct Stmt::Class : Stmt {
+    Token name;
+    std::shared_ptr<Expr::Variable> superclass;
+    std::vector<Stmt::Function> methods;
+
+    Class(
+        Token n,
+        std::shared_ptr<Expr::Variable> s,
+        std::vector<Stmt::Function> m)
+        : name(std::move(n)),
+          superclass(std::move(s)),
+          methods(std::move(m)) {}
+
+    void accept(StmtVisitor& visitor) override {
+        visitor.visitClassStmt(*this);
+    }
+};
+
+struct Stmt::Expression : Stmt {
+    std::shared_ptr<Expr> expression;
+
+    explicit Expression(std::shared_ptr<Expr> e)
+        : expression(std::move(e)) {}
+
+    void accept(StmtVisitor& visitor) override {
+        visitor.visitExpressionStmt(*this);
     }
 };
 
@@ -301,13 +312,13 @@ struct Stmt::If : Stmt {
     If(
         std::shared_ptr<Expr> c,
         std::shared_ptr<Stmt> t,
-        std::shared_ptr<Stmt> e
-    ) : condition(std::move(c)),
-        thenBranch(std::move(t)),
-        elseBranch(std::move(e)) {}
+        std::shared_ptr<Stmt> e)
+        : condition(std::move(c)),
+          thenBranch(std::move(t)),
+          elseBranch(std::move(e)) {}
 
-    void accept(StmtVisitor& v) override {
-        v.visitIfStmt(*this);
+    void accept(StmtVisitor& visitor) override {
+        visitor.visitIfStmt(*this);
     }
 };
 
@@ -317,8 +328,8 @@ struct Stmt::Print : Stmt {
     explicit Print(std::shared_ptr<Expr> e)
         : expression(std::move(e)) {}
 
-    void accept(StmtVisitor& v) override {
-        v.visitPrintStmt(*this);
+    void accept(StmtVisitor& visitor) override {
+        visitor.visitPrintStmt(*this);
     }
 };
 
@@ -329,8 +340,8 @@ struct Stmt::Return : Stmt {
     Return(Token k, std::shared_ptr<Expr> v)
         : keyword(std::move(k)), value(std::move(v)) {}
 
-    void accept(StmtVisitor& v) override {
-        v.visitReturnStmt(*this);
+    void accept(StmtVisitor& visitor) override {
+        visitor.visitReturnStmt(*this);
     }
 };
 
@@ -339,10 +350,11 @@ struct Stmt::Var : Stmt {
     std::shared_ptr<Expr> initializer;
 
     Var(Token n, std::shared_ptr<Expr> i)
-        : name(std::move(n)), initializer(std::move(i)) {}
+        : name(std::move(n)),
+          initializer(std::move(i)) {}
 
-    void accept(StmtVisitor& v) override {
-        v.visitVarStmt(*this);
+    void accept(StmtVisitor& visitor) override {
+        visitor.visitVarStmt(*this);
     }
 };
 
@@ -350,10 +362,13 @@ struct Stmt::While : Stmt {
     std::shared_ptr<Expr> condition;
     std::shared_ptr<Stmt> body;
 
-    While(std::shared_ptr<Expr> c, std::shared_ptr<Stmt> b)
-        : condition(std::move(c)), body(std::move(b)) {}
+    While(
+        std::shared_ptr<Expr> c,
+        std::shared_ptr<Stmt> b)
+        : condition(std::move(c)),
+          body(std::move(b)) {}
 
-    void accept(StmtVisitor& v) override {
-        v.visitWhileStmt(*this);
+    void accept(StmtVisitor& visitor) override {
+        visitor.visitWhileStmt(*this);
     }
 };

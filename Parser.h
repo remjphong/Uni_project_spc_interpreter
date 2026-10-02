@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+
 #include "AST.h"
 #include "Token.h"
 
@@ -13,7 +14,7 @@ private:
     struct ParseError {};
 
     std::vector<Token> tokens;
-    size_t current = 0;
+    std::size_t current = 0;
 
     bool isAtEnd() const;
     const Token& peek() const;
@@ -21,14 +22,20 @@ private:
     const Token& advance();
     bool check(TokenType type) const;
     bool match(std::initializer_list<TokenType> types);
-    const Token& consume(TokenType type, const std::string& message);
+    const Token& consume(
+        TokenType type,
+        const std::string& message);
 
-    ParseError error(const Token& token, const std::string& message);
+    ParseError error(
+        const Token& token,
+        const std::string& message);
+
     void synchronize();
 
     std::shared_ptr<Stmt> declaration();
     std::shared_ptr<Stmt> classDeclaration();
-    std::shared_ptr<Stmt> function(const std::string& kind);
+    std::shared_ptr<Stmt::Function> function(
+        const std::string& kind);
     std::shared_ptr<Stmt> varDeclaration();
 
     std::shared_ptr<Stmt> statement();
@@ -49,10 +56,12 @@ private:
     std::shared_ptr<Expr> factor();
     std::shared_ptr<Expr> unary();
     std::shared_ptr<Expr> call();
-    std::shared_ptr<Expr> finishCall(std::shared_ptr<Expr> callee);
+    std::shared_ptr<Expr> finishCall(
+        std::shared_ptr<Expr> callee);
     std::shared_ptr<Expr> primary();
 
 public:
     explicit Parser(std::vector<Token> token_list);
+
     std::vector<std::shared_ptr<Stmt>> parse();
 };
