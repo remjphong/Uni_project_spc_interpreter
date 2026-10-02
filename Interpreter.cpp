@@ -703,7 +703,6 @@ void Interpreter::visitClassStmt(Stmt::Class& stmt)
         std::shared_ptr<LoxFunction>
     > methods;
 
-    /* AST của nhóm dùng vector<Stmt::Function>, nên không dùng method.get(). */
     for (auto& method : stmt.methods)
     {
         bool initializer = method.name.lexeme == "init";
