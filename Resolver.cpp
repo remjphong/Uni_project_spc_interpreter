@@ -8,15 +8,43 @@ Resolver::Resolver(Interpreter& interpreter)
 {
 }
 
+// =====================================================
+// Resolve program statements
+// =====================================================
+//
+// main.cpp co the goi:
+//     resolver.resolve(statements);
+//
+// Ham nay chuyen tiep sang resolveStatements()
+// de tranh xung dot voi resolve(Stmt&) va resolve(Expr&).
+//
+void Resolver::resolve(
+    const std::vector<std::shared_ptr<Stmt>>& statements)
+{
+    resolveStatements(statements);
+}
+
+// =====================================================
+// Resolve one statement
+// =====================================================
+
 void Resolver::resolve(Stmt& stmt)
 {
     stmt.accept(*this);
 }
 
+// =====================================================
+// Resolve one expression
+// =====================================================
+
 void Resolver::resolve(Expr& expr)
 {
     expr.accept(*this);
 }
+
+// =====================================================
+// Scope
+// =====================================================
 
 void Resolver::beginScope()
 {
@@ -31,11 +59,16 @@ void Resolver::endScope()
     }
 }
 
+// =====================================================
+// Variable declaration / definition
+// =====================================================
+
 void Resolver::declare(const Token& name)
 {
+    // Global variable khong can luu trong local scope stack.
     if (scopes.empty())
     {
-        return; // Global khong can luu trong scope stack.
+        return;
     }
 
     Scope& scope = scopes.back();
@@ -48,19 +81,25 @@ void Resolver::declare(const Token& name)
         );
     }
 
-    // false = da declare, chua define.
+    // false = declared nhung chua defined.
     scope[name.lexeme] = false;
 }
 
 void Resolver::define(const Token& name)
 {
+    // Global variable khong can luu trong local scope stack.
     if (scopes.empty())
     {
         return;
     }
 
+    // true = da defined.
     scopes.back()[name.lexeme] = true;
 }
+
+// =====================================================
+// Resolve local variable
+// =====================================================
 
 void Resolver::resolveLocal(Expr& expr, const Token& name)
 {
@@ -76,30 +115,46 @@ void Resolver::resolveLocal(Expr& expr, const Token& name)
         }
     }
 
-    // Khong tim thay trong local scopes => bien global.
+    // Khong tim thay trong local scopes
+    // => variable la global.
 }
+
+// =====================================================
+// Resolve function
+// =====================================================
 
 void Resolver::resolveFunction(
     const Stmt::Function& function,
     FunctionType type)
 {
+    // Luu lai function context hien tai.
     const FunctionType enclosingFunction = currentFunction;
+
     currentFunction = type;
 
+    // Function tao mot local scope moi.
     beginScope();
 
+    // Resolve parameters.
     for (const auto& parameter : function.params)
     {
         declare(parameter);
         define(parameter);
     }
 
-    resolve(function.body);
+    // Resolve function body.
+    resolveStatements(function.body);
 
+    // Ket thuc scope cua function.
     endScope();
 
+    // Khoi phuc context cu.
     currentFunction = enclosingFunction;
 }
+
+// =====================================================
+// Error
+// =====================================================
 
 void Resolver::error(
     const Token& token,
@@ -111,107 +166,145 @@ void Resolver::error(
         << message << '\n';
 }
 
-// =========================
+// =====================================================
 // Expr visitor
-// =========================
+// =====================================================
 
-void Resolver::visitAssignExpr(Expr::Assign& expr)
+std::any Resolver::visitAssignExpr(Expr::Assign& expr)
 {
+    // Resolve value truoc.
     resolve(*expr.value);
+
+    // Sau do resolve bien duoc gan.
     resolveLocal(expr, expr.name);
+
+    return {};
 }
 
-void Resolver::visitBinaryExpr(Expr::Binary& expr)
+std::any Resolver::visitBinaryExpr(Expr::Binary& expr)
 {
     resolve(*expr.left);
     resolve(*expr.right);
+
+    return {};
 }
 
-void Resolver::visitCallExpr(Expr::Call& expr)
+std::any Resolver::visitCallExpr(Expr::Call& expr)
 {
+    // Resolve callee.
     resolve(*expr.callee);
 
+    // Resolve tat ca arguments.
     for (const auto& argument : expr.arguments)
     {
         resolve(*argument);
     }
+
+    return {};
 }
 
-void Resolver::visitGetExpr(Expr::Get& expr)
+std::any Resolver::visitGetExpr(Expr::Get& expr)
 {
+    // Resolve object.
     resolve(*expr.object);
+
+    return {};
 }
 
-void Resolver::visitGroupingExpr(Expr::Grouping& expr)
+std::any Resolver::visitGroupingExpr(Expr::Grouping& expr)
 {
     resolve(*expr.expression);
+
+    return {};
 }
 
-void Resolver::visitLiteralExpr(Expr::Literal& /*expr*/)
+std::any Resolver::visitLiteralExpr(Expr::Literal& /*expr*/)
 {
-    // Khong co gi de resolve.
+    // Literal khong co variable de resolve.
+    return {};
 }
 
-void Resolver::visitLogicalExpr(Expr::Logical& expr)
+std::any Resolver::visitLogicalExpr(Expr::Logical& expr)
 {
     resolve(*expr.left);
     resolve(*expr.right);
+
+    return {};
 }
 
-void Resolver::visitSetExpr(Expr::Set& expr)
+std::any Resolver::visitSetExpr(Expr::Set& expr)
 {
-    // Resolve value truoc, sau do resolve object.
+    // Resolve value truoc.
     resolve(*expr.value);
+
+    // Sau do resolve object.
     resolve(*expr.object);
+
+    return {};
 }
 
-void Resolver::visitSuperExpr(Expr::Super& expr)
+std::any Resolver::visitSuperExpr(Expr::Super& expr)
 {
+    // super chi duoc dung trong class.
     if (currentClass == ClassType::NONE)
     {
         error(
             expr.keyword,
             "Can't use 'super' outside of a class."
         );
-        return;
+
+        return {};
     }
 
+    // super chi duoc dung trong subclass.
     if (currentClass != ClassType::SUBCLASS)
     {
         error(
             expr.keyword,
             "Can't use 'super' in a class with no superclass."
         );
-        return;
+
+        return {};
     }
 
     resolveLocal(expr, expr.keyword);
+
+    return {};
 }
 
-void Resolver::visitThisExpr(Expr::This& expr)
+std::any Resolver::visitThisExpr(Expr::This& expr)
 {
+    // this chi duoc dung trong class.
     if (currentClass == ClassType::NONE)
     {
         error(
             expr.keyword,
             "Can't use 'this' outside of a class."
         );
-        return;
+
+        return {};
     }
 
     resolveLocal(expr, expr.keyword);
+
+    return {};
 }
 
-void Resolver::visitUnaryExpr(Expr::Unary& expr)
+std::any Resolver::visitUnaryExpr(Expr::Unary& expr)
 {
     resolve(*expr.right);
+
+    return {};
 }
 
-void Resolver::visitVariableExpr(Expr::Variable& expr)
+std::any Resolver::visitVariableExpr(Expr::Variable& expr)
 {
+    // Neu variable dang duoc declare nhung chua define,
+    // khong cho phep doc no trong initializer cua chinh no.
     if (!scopes.empty())
     {
-        const auto it = scopes.back().find(expr.name.lexeme);
+        const auto it =
+            scopes.back().find(expr.name.lexeme);
 
         if (it != scopes.back().end() && !it->second)
         {
@@ -223,30 +316,42 @@ void Resolver::visitVariableExpr(Expr::Variable& expr)
     }
 
     resolveLocal(expr, expr.name);
+
+    return {};
 }
 
-// =========================
+// =====================================================
 // Stmt visitor
-// =========================
+// =====================================================
 
 void Resolver::visitBlockStmt(Stmt::Block& stmt)
 {
     beginScope();
-    resolve(stmt.statements);
+
+    resolveStatements(stmt.statements);
+
     endScope();
 }
 
 void Resolver::visitClassStmt(Stmt::Class& stmt)
 {
+    // Luu class context hien tai.
     const ClassType enclosingClass = currentClass;
+
     currentClass = ClassType::CLASS;
 
+    // Class name phai duoc declare/define truoc.
     declare(stmt.name);
     define(stmt.name);
 
+    // =================================================
+    // Superclass
+    // =================================================
+
     if (stmt.superclass)
     {
-        // class A < A {} la loi.
+        // Khong cho:
+        // class A < A {}
         if (stmt.name.lexeme == stmt.superclass->name.lexeme)
         {
             error(
@@ -256,82 +361,115 @@ void Resolver::visitClassStmt(Stmt::Class& stmt)
         }
 
         currentClass = ClassType::SUBCLASS;
+
+        // Resolve superclass expression.
         resolve(*stmt.superclass);
 
-        // Scope nay chua 'super'.
+        // Tao scope danh rieng cho "super".
         beginScope();
+
         scopes.back()["super"] = true;
     }
 
-    // Scope nay chua 'this'.
+    // =================================================
+    // this
+    // =================================================
+
+    // Tao scope danh rieng cho "this".
     beginScope();
+
     scopes.back()["this"] = true;
+
+    // =================================================
+    // Methods
+    // =================================================
 
     for (const auto& method : stmt.methods)
     {
-        FunctionType declaration = FunctionType::METHOD;
+        FunctionType declaration =
+            FunctionType::METHOD;
 
         if (method.name.lexeme == "init")
         {
-            declaration = FunctionType::INITIALIZER;
+            declaration =
+                FunctionType::INITIALIZER;
         }
 
         resolveFunction(method, declaration);
     }
 
-    endScope(); // 'this'
+    // Ket thuc scope cua "this".
+    endScope();
 
+    // Neu co superclass thi ket thuc scope cua "super".
     if (stmt.superclass)
     {
-        endScope(); // 'super'
+        endScope();
     }
 
+    // Khoi phuc class context cu.
     currentClass = enclosingClass;
 }
 
-void Resolver::visitExpressionStmt(Stmt::Expression& stmt)
+void Resolver::visitExpressionStmt(
+    Stmt::Expression& stmt)
 {
     resolve(*stmt.expression);
 }
 
-void Resolver::visitFunctionStmt(Stmt::Function& stmt)
+void Resolver::visitFunctionStmt(
+    Stmt::Function& stmt)
 {
-    // Define ten ham truoc khi resolve body de ho tro recursion.
+    // Define function name truoc khi resolve body
+    // de ho tro recursion.
     declare(stmt.name);
     define(stmt.name);
 
-    resolveFunction(stmt, FunctionType::FUNCTION);
+    resolveFunction(
+        stmt,
+        FunctionType::FUNCTION
+    );
 }
 
-void Resolver::visitIfStmt(Stmt::If& stmt)
+void Resolver::visitIfStmt(
+    Stmt::If& stmt)
 {
+    // Resolve condition.
     resolve(*stmt.condition);
+
+    // Resolve then branch.
     resolve(*stmt.thenBranch);
 
+    // Resolve else branch neu co.
     if (stmt.elseBranch)
     {
         resolve(*stmt.elseBranch);
     }
 }
 
-void Resolver::visitPrintStmt(Stmt::Print& stmt)
+void Resolver::visitPrintStmt(
+    Stmt::Print& stmt)
 {
     resolve(*stmt.expression);
 }
 
-void Resolver::visitReturnStmt(Stmt::Return& stmt)
+void Resolver::visitReturnStmt(
+    Stmt::Return& stmt)
 {
+    // return khong duoc nam o top-level.
     if (currentFunction == FunctionType::NONE)
     {
         error(
             stmt.keyword,
             "Can't return from top-level code."
         );
+
         return;
     }
 
     if (stmt.value)
     {
+        // Initializer khong duoc return value.
         if (currentFunction == FunctionType::INITIALIZER)
         {
             error(
@@ -344,19 +482,25 @@ void Resolver::visitReturnStmt(Stmt::Return& stmt)
     }
 }
 
-void Resolver::visitVarStmt(Stmt::Var& stmt)
+void Resolver::visitVarStmt(
+    Stmt::Var& stmt)
 {
+    // Declare variable truoc.
     declare(stmt.name);
 
+    // Resolve initializer neu co.
     if (stmt.initializer)
     {
         resolve(*stmt.initializer);
     }
 
+    // Sau khi initializer duoc resolve,
+    // variable moi duoc define.
     define(stmt.name);
 }
 
-void Resolver::visitWhileStmt(Stmt::While& stmt)
+void Resolver::visitWhileStmt(
+    Stmt::While& stmt)
 {
     resolve(*stmt.condition);
     resolve(*stmt.body);

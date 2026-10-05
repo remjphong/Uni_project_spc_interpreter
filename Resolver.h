@@ -1,5 +1,6 @@
 #pragma once
 
+#include <any>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -38,9 +39,12 @@ private:
 public:
     explicit Resolver(Interpreter& interpreter);
 
+    void resolve(
+        const std::vector<std::shared_ptr<Stmt>>& statements);
+        
     // Resolve mot danh sach statement cua chuong trinh/block.
     template <typename StatementContainer>
-    void resolve(const StatementContainer& statements)
+    void resolveStatements(const StatementContainer& statements)
     {
         for (const auto& statement : statements)
         {
@@ -60,34 +64,53 @@ private:
     void beginScope();
     void endScope();
 
-    // Variable state: false = declared, true = defined.
+    // Variable state:
+    // false = declared
+    // true  = defined
     void declare(const Token& name);
     void define(const Token& name);
 
-    // Tim declaration gan nhat cua variable va luu lexical distance.
+    // Tim declaration gan nhat cua variable
+    // va luu lexical distance.
     void resolveLocal(Expr& expr, const Token& name);
 
     // Resolve function body trong mot scope moi.
-    void resolveFunction(const Stmt::Function& function, FunctionType type);
+    void resolveFunction(
+        const Stmt::Function& function,
+        FunctionType type
+    );
 
     // In semantic error.
-    void error(const Token& token, const std::string& message) const;
+    void error(
+        const Token& token,
+        const std::string& message
+    ) const;
 
-    // ----- Expr visitor -----
-    void visitAssignExpr(Expr::Assign& expr) override;
-    void visitBinaryExpr(Expr::Binary& expr) override;
-    void visitCallExpr(Expr::Call& expr) override;
-    void visitGetExpr(Expr::Get& expr) override;
-    void visitGroupingExpr(Expr::Grouping& expr) override;
-    void visitLiteralExpr(Expr::Literal& expr) override;
-    void visitLogicalExpr(Expr::Logical& expr) override;
-    void visitSetExpr(Expr::Set& expr) override;
-    void visitSuperExpr(Expr::Super& expr) override;
-    void visitThisExpr(Expr::This& expr) override;
-    void visitUnaryExpr(Expr::Unary& expr) override;
-    void visitVariableExpr(Expr::Variable& expr) override;
+    // =====================================================
+    // Expr visitor
+    // ExprVisitor yeu cau std::any.
+    // Resolver khong dung gia tri return,
+    // nen cac ham se return {}.
+    // =====================================================
 
-    // ----- Stmt visitor -----
+    std::any visitAssignExpr(Expr::Assign& expr) override;
+    std::any visitBinaryExpr(Expr::Binary& expr) override;
+    std::any visitCallExpr(Expr::Call& expr) override;
+    std::any visitGetExpr(Expr::Get& expr) override;
+    std::any visitGroupingExpr(Expr::Grouping& expr) override;
+    std::any visitLiteralExpr(Expr::Literal& expr) override;
+    std::any visitLogicalExpr(Expr::Logical& expr) override;
+    std::any visitSetExpr(Expr::Set& expr) override;
+    std::any visitSuperExpr(Expr::Super& expr) override;
+    std::any visitThisExpr(Expr::This& expr) override;
+    std::any visitUnaryExpr(Expr::Unary& expr) override;
+    std::any visitVariableExpr(Expr::Variable& expr) override;
+
+    // =====================================================
+    // Stmt visitor
+    // StmtVisitor van la void.
+    // =====================================================
+
     void visitBlockStmt(Stmt::Block& stmt) override;
     void visitClassStmt(Stmt::Class& stmt) override;
     void visitExpressionStmt(Stmt::Expression& stmt) override;
