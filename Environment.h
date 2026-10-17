@@ -1,56 +1,24 @@
-#pragma once
+#ifndef ENVIRONMENT_H
+#define ENVIRONMENT_H
 
-#include <any>
-#include <memory>
-#include <string>
-#include <unordered_map>
+#include <stdbool.h>
+#include <stddef.h>
 
-class Environment
-    : public std::enable_shared_from_this<Environment>
-{
-private:
-    std::unordered_map<std::string, std::any> values;
+typedef struct EnvironmentEntry {
+    char *name;
+    void *value;
+    struct EnvironmentEntry *next;
+} EnvironmentEntry;
 
-    std::shared_ptr<Environment> enclosing;
+typedef struct Environment {
+    EnvironmentEntry *entries;
+    struct Environment *enclosing;
+} Environment;
 
-public:
-    Environment();
+Environment *environment_new(Environment *enclosing);
+void environment_free(Environment *environment);
+bool environment_define(Environment *environment, const char *name, void *value);
+bool environment_assign(Environment *environment, const char *name, void *value);
+void *environment_get(const Environment *environment, const char *name);
 
-    explicit Environment(
-        std::shared_ptr<Environment> enclosing
-    );
-
-    void define(
-        const std::string& name,
-        const std::any& value
-    );
-
-    std::any get(
-        const std::string& name
-    );
-
-    void assign(
-        const std::string& name,
-        const std::any& value
-    );
-
-    std::any getAt(
-        int distance,
-        const std::string& name
-    );
-
-    void assignAt(
-        int distance,
-        const std::string& name,
-        const std::any& value
-    );
-
-private:
-    std::shared_ptr<Environment> ancestor(
-        int distance
-    );
-
-    std::any getValue(
-        const std::string& name
-    );
-};
+#endif
