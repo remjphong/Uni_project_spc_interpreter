@@ -143,6 +143,87 @@ void free_stmt(Stmt* stmt) {
     free(stmt);
 }
 
+// dynamic array management
+static void stmt_list_push(StmtList* list, Stmt* stmt) {
+    // extend memory
+    if (list->count >= list->capacity) {
+        list->capacity = (list->capacity == 0) ? 8 : list->capacity * 2;
 
+        list->items = (Stmt**)realloc(list->items, list->capacity * sizeof(Stmt*));
+    }
+    // add
+    list->items[list->count++] = stmt;
+}
 
+// free up list stmt
+void stmt_list_free(StmtList* list) {
+    for (size_t i = 0; i < list->count; ++i) {
+        free_stmt(list->items[i]);
+    }
+    
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+    list->capacity = 0;
+}
+
+// function for navigation, check Token (Private -> static)
+static const Token* peek(const Parser* p) {
+    return &p->tokens[p->current];
+}
+
+static const Token* previous(const Parser* p) {
+    return &p->tokens[p->current - 1];
+}
+
+static bool is_at_end(const Parser* p) {
+    return peek(p)->type == TOKEN_EOF;
+}
+
+static const Token* advance(Parser* p) {
+    if (!is_at_end(p)) {
+        p->current++;
+    }
+    return previous(p);
+}
+
+static bool check(const Parser* p, TokenType type) {
+    if (is_at_end(p)) return false;
+    return peek(p)->type == type;
+}
+
+static bool match_one(Parser* p, TokenType type) {
+    if (check(p, type)) {
+        advance(p);
+        return true;
+    }
+    return false;
+}
+
+// extend match_one (check list)
+static bool match_any(Parser* p, const TokenType* types, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        if (check(p, types[i])) {
+            advance(p);
+            return true;
+        }
+    }
+    return false;
+}
+
+// syntax error handling and Parser recovery
+// 1. error detect and status
+static void error_at(Parser* p, const Token* token, const char* message) {
+    if (p->panic_mode) return;
+    p->panic_mode = true;
+    p->had_error = true;
+
+    fprintf(stderr, "[line %d] Error", token->line);
+    if (token->type == TOKEN_EOF) {
+        fprintf(stderr, " at end");
+    } else {
+        fprintf(stderr, " at '%s'", token->lexeme);
+    }
+    fprintf(stderr, ": %s\n", message);
+}
 
