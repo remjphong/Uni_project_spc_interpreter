@@ -212,7 +212,6 @@ static bool match_any(Parser* p, const TokenType* types, size_t count) {
 }
 
 // syntax error handling and Parser recovery
-// 1. error detect and status
 static void error_at(Parser* p, const Token* token, const char* message) {
     if (p->panic_mode) return;
     p->panic_mode = true;
@@ -227,3 +226,246 @@ static void error_at(Parser* p, const Token* token, const char* message) {
     fprintf(stderr, ": %s\n", message);
 }
 
+static const Token* consume(Parser* p, TokenType type, const char* message) {
+    if (check(p, type)) {
+        return advance(p);
+    }
+    error_at(p, peek(p), message);
+    return NULL;
+}
+
+static void synchronize(Parser* p) {
+    p->panic_mode = false;
+
+    while (!is_at_end(p)) {
+        if (p->current > 0 && previous(p)->type == TOKEN_SEMICOLON) {
+            return;
+        }
+
+        switch (peek(p)->type) {
+            case TOKEN_CLASS:
+            case TOKEN_FUN:
+            case TOKEN_VAR:
+            case TOKEN_FOR:
+            case TOKEN_IF:
+            case TOKEN_WHILE:
+            case TOKEN_PRINT:
+            case TOKEN_RETURN:
+            case TOKEN_RIGHT_BRACE:
+                return;
+            default:
+                advance(p);
+        }
+    }
+}
+
+static Expr* expression(Parser* p);
+static Stmt* statement(Parser* p);
+static Stmt* declaration(Parser* p);
+
+// expression analysis
+static Expr* primary(Parser* p) {
+    if (match_one(p, TOKEN_FALSE)) return new_literal_bool(false);
+    if (match_one(p, TOKEN_TRUE))  return new_literal_bool(true);
+    if (match_one(p, TOKEN_NIL))   return new_literal_nil();
+
+    if (match_one(p, TOKEN_NUMBER)) {
+        double val = strtod(previous(p)->lexeme, NULL);
+        return new_literal_number(val);
+    }
+
+    if (match_one(p, TOKEN_STRING)) {
+        const char* lex = previous(p)->lexeme;
+        size_t len = strlen(lex);
+        // Cắt bỏ cặp dấu ngoặc kép ở 2 đầu nếu có
+        if (len >= 2 && lex[0] == '"' && lex[len - 1] == '"') {
+            return new_literal_string(lex + 1, len - 2);
+        }
+        return new_literal_string(lex, len);
+    }
+
+    if (match_one(p, TOKEN_IDENTIFIER)) {
+        return new_variable_expr(*previous(p));
+    }
+
+    if (match_one(p, TOKEN_LEFT_PAREN)) {
+        Expr* expr = expression(p);
+        if (!expr) return NULL;
+
+        if (!consume(p, TOKEN_RIGHT_PAREN, "Expect ')' after expression.")) {
+            free_expr(expr);
+            return NULL;
+        }
+        return new_grouping_expr(expr);
+    }
+
+    error_at(p, peek(p), "Expect expression.");
+    return NULL;
+}
+
+static Expr* unary(Parser* p) {
+    const TokenType ops[] = {TOKEN_BANG, TOKEN_MINUS};
+    if (match_any(p, ops, 2)) {
+        Token op = *previous(p);
+        Expr* right = unary(p);
+        if (!right) return NULL;
+        return new_unary_expr(op, right);
+    }
+    return primary(p);
+}
+
+static Expr* factor(Parser* p) {
+    Expr* expr = unary(p);
+    if (!expr) return NULL;
+
+    const TokenType ops[] = {TOKEN_SLASH, TOKEN_STAR};
+    while (match_any(p, ops, 2)) {
+        Token op = *previous(p);
+        Expr* right = unary(p);
+        if (!right) {
+            free_expr(expr);
+            return NULL;
+        }
+        expr = new_binary_expr(expr, op, right);
+    }
+    return expr;
+}
+
+static Expr* term(Parser* p) {
+    Expr* expr = factor(p);
+    if (!expr) return NULL;
+
+    const TokenType ops[] = {TOKEN_MINUS, TOKEN_PLUS};
+    while (match_any(p, ops, 2)) {
+        Token op = *previous(p);
+        Expr* right = factor(p);
+        if (!right) {
+            free_expr(expr);
+            return NULL;
+        }
+        expr = new_binary_expr(expr, op, right);
+    }
+    return expr;
+}
+
+static Expr* comparison(Parser* p) {
+    Expr* expr = term(p);
+    if (!expr) return NULL;
+
+    const TokenType ops[] = {
+        TOKEN_GREATER, TOKEN_GREATER_EQUAL,
+        TOKEN_LESS, TOKEN_LESS_EQUAL
+    };
+    while (match_any(p, ops, 4)) {
+        Token op = *previous(p);
+        Expr* right = term(p);
+        if (!right) {
+            free_expr(expr);
+            return NULL;
+        }
+        expr = new_binary_expr(expr, op, right);
+    }
+    return expr;
+}
+
+static Expr* equality(Parser* p) {
+    Expr* expr = comparison(p);
+    if (!expr) return NULL;
+
+    const TokenType ops[] = {TOKEN_BANG_EQUAL, TOKEN_EQUAL_EQUAL};
+    while (match_any(p, ops, 2)) {
+        Token op = *previous(p);
+        Expr* right = comparison(p);
+        if (!right) {
+            free_expr(expr);
+            return NULL;
+        }
+        expr = new_binary_expr(expr, op, right);
+    }
+    return expr;
+}
+
+static Expr* expression(Parser* p) {
+    return equality(p);
+}
+
+// Statements & Declarations analysis
+static Stmt* print_statement(Parser* p) {
+    Expr* value = expression(p);
+    if (!value) return NULL;
+
+    if (!consume(p, TOKEN_SEMICOLON, "Expect ';' after value.")) {
+        free_expr(value);
+        return NULL;
+    }
+    return new_print_stmt(value);
+}
+
+static Stmt* statement(Parser* p) {
+    if (match_one(p, TOKEN_PRINT)) {
+        return print_statement(p);
+    }
+
+    Expr* expr = expression(p);
+    if (!expr) return NULL;
+
+    if (!consume(p, TOKEN_SEMICOLON, "Expect ';' after expression.")) {
+        free_expr(expr);
+        return NULL;
+    }
+    return new_expression_stmt(expr);
+}
+
+static Stmt* var_declaration(Parser* p) {
+    const Token* name = consume(p, TOKEN_IDENTIFIER, "Expect variable name.");
+    if (!name) return NULL;
+
+    Expr* initializer = NULL;
+    if (match_one(p, TOKEN_EQUAL)) {
+        initializer = expression(p);
+        if (!initializer) return NULL;
+    }
+
+    if (!consume(p, TOKEN_SEMICOLON, "Expect ';' after variable declaration.")) {
+        free_expr(initializer);
+        return NULL;
+    }
+    return new_var_stmt(*name, initializer);
+}
+
+static Stmt* declaration(Parser* p) {
+    Stmt* stmt = NULL;
+
+    if (match_one(p, TOKEN_VAR)) {
+        stmt = var_declaration(p);
+    } else {
+        stmt = statement(p);
+    }
+
+    if (p->panic_mode) {
+        synchronize(p);
+        return NULL;
+    }
+    return stmt;
+}
+
+// parser interface
+void parser_init(Parser* parser, const Token* tokens, size_t token_count) {
+    parser->tokens = tokens;
+    parser->token_count = token_count;
+    parser->current = 0;
+    parser->had_error = false;
+    parser->panic_mode = false;
+}
+
+StmtList parser_parse(Parser* parser) {
+    StmtList statements = {NULL, 0, 0};
+
+    while (!is_at_end(parser)) {
+        Stmt* stmt = declaration(parser);
+        if (stmt) {
+            stmt_list_push(&statements, stmt);
+        }
+    }
+    return statements;
+}
