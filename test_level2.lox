@@ -1,0 +1,33 @@
+
+ // TEST 2: Control flow and scopes
+ // Mục tiêu: kiểm tra if/else, while, for, block scope và cập nhật biến
+ 
+print "=== CONTROL FLOW TEST ===";
+
+var total = 0;
+
+for (var i = 1; i <= 5; i = i + 1) {
+    total = total + i;
+}
+
+print total;
+
+var count = 3;
+
+while (count > 0) {
+    print count;
+    count = count - 1;
+}
+
+if (total == 15) {
+    print "Sum is correct";
+} else {
+    print "Sum is incorrect";
+}
+
+{
+    var local = "inside block";
+    print local;
+}
+
+print "Finished";

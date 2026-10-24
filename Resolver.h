@@ -1,123 +1,125 @@
-#pragma once
+#ifndef RESOLVER_H
+#define RESOLVER_H
 
-#include <any>
-#include <string>
-#include <unordered_map>
-#include <vector>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
 
 #include "AST.h"
-#include "Token.h"
 
-class Interpreter;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-class Resolver : public ExprVisitor, public StmtVisitor
-{
-private:
-    using Scope = std::unordered_map<std::string, bool>;
+/* Forward declaration: Resolver does not depend on Interpreter internals. */
+typedef struct Interpreter Interpreter;
 
-    enum class FunctionType
-    {
-        NONE,
-        FUNCTION,
-        INITIALIZER,
-        METHOD
-    };
+typedef struct {
+    char *name;       /* Owned copy of the variable name. */
+    bool defined;     /* false = declared, true = defined. */
+} ScopeEntry;
 
-    enum class ClassType
-    {
-        NONE,
-        CLASS,
-        SUBCLASS
-    };
+typedef struct {
+    ScopeEntry *entries;
+    size_t count;
+    size_t capacity;
+} Scope;
 
-    Interpreter& interpreter;
-    std::vector<Scope> scopes;
+typedef enum {
+    RESOLVER_FUNCTION_NONE,
+    RESOLVER_FUNCTION_FUNCTION,
+    RESOLVER_FUNCTION_INITIALIZER,
+    RESOLVER_FUNCTION_METHOD
+} ResolverFunctionType;
 
-    FunctionType currentFunction = FunctionType::NONE;
-    ClassType currentClass = ClassType::NONE;
+typedef enum {
+    RESOLVER_CLASS_NONE,
+    RESOLVER_CLASS_CLASS,
+    RESOLVER_CLASS_SUBCLASS
+} ResolverClassType;
 
-public:
-    explicit Resolver(Interpreter& interpreter);
+typedef struct {
+    const Expr *expression;
+    size_t distance;
+} ResolverBinding;
 
-    void resolve(
-        const std::vector<std::shared_ptr<Stmt>>& statements);
-        
-    // Resolve mot danh sach statement cua chuong trinh/block.
-    template <typename StatementContainer>
-    void resolveStatements(const StatementContainer& statements)
-    {
-        for (const auto& statement : statements)
-        {
-            if (statement)
-            {
-                resolve(*statement);
-            }
-        }
-    }
+/*
+ * Optional sink used to mirror each local binding into Interpreter storage.
+ * `context` can be the Interpreter pointer. The callback should copy/store the
+ * expression pointer and lexical distance; it must not take ownership of AST.
+ */
+typedef void (*ResolverBindingSink)(
+    void *context,
+    const Expr *expression,
+    size_t distance
+);
 
-    // Resolve mot node.
-    void resolve(Stmt& stmt);
-    void resolve(Expr& expr);
+typedef struct Resolver {
+    Interpreter *interpreter; /* Kept for API compatibility; opaque here. */
 
-private:
-    // Scope
-    void beginScope();
-    void endScope();
+    Scope *scopes;
+    size_t scope_count;
+    size_t scope_capacity;
 
-    // Variable state:
-    // false = declared
-    // true  = defined
-    void declare(const Token& name);
-    void define(const Token& name);
+    ResolverBinding *bindings;
+    size_t binding_count;
+    size_t binding_capacity;
 
-    // Tim declaration gan nhat cua variable
-    // va luu lexical distance.
-    void resolveLocal(Expr& expr, const Token& name);
+    ResolverFunctionType current_function;
+    ResolverClassType current_class;
 
-    // Resolve function body trong mot scope moi.
-    void resolveFunction(
-        const Stmt::Function& function,
-        FunctionType type
-    );
+    ResolverBindingSink binding_sink;
+    void *binding_sink_context;
+    FILE *error_stream;
 
-    // In semantic error.
-    void error(
-        const Token& token,
-        const std::string& message
-    ) const;
+    bool had_error;
+    bool out_of_memory;
+} Resolver;
 
-    // =====================================================
-    // Expr visitor
-    // ExprVisitor yeu cau std::any.
-    // Resolver khong dung gia tri return,
-    // nen cac ham se return {}.
-    // =====================================================
+/* Initialize once before the first use. Error output defaults to stderr. */
+void resolver_init(Resolver *resolver, Interpreter *interpreter);
+void resolver_free(Resolver *resolver);
+void resolver_set_error_stream(Resolver *resolver, FILE *stream);
+void resolver_set_binding_sink(
+    Resolver *resolver,
+    ResolverBindingSink sink,
+    void *context
+);
 
-    std::any visitAssignExpr(Expr::Assign& expr) override;
-    std::any visitBinaryExpr(Expr::Binary& expr) override;
-    std::any visitCallExpr(Expr::Call& expr) override;
-    std::any visitGetExpr(Expr::Get& expr) override;
-    std::any visitGroupingExpr(Expr::Grouping& expr) override;
-    std::any visitLiteralExpr(Expr::Literal& expr) override;
-    std::any visitLogicalExpr(Expr::Logical& expr) override;
-    std::any visitSetExpr(Expr::Set& expr) override;
-    std::any visitSuperExpr(Expr::Super& expr) override;
-    std::any visitThisExpr(Expr::This& expr) override;
-    std::any visitUnaryExpr(Expr::Unary& expr) override;
-    std::any visitVariableExpr(Expr::Variable& expr) override;
+/* Resolve a whole program or one AST node. */
+void resolver_resolve_statements(
+    Resolver *resolver,
+    Stmt *const *statements,
+    size_t statement_count
+);
+void resolver_resolve_stmt(Resolver *resolver, Stmt *stmt);
+void resolver_resolve_expr(Resolver *resolver, Expr *expr);
+void resolver_resolve_local(Resolver *resolver, Expr *expr, Token name);
 
-    // =====================================================
-    // Stmt visitor
-    // StmtVisitor van la void.
-    // =====================================================
+/* Scope operations, exposed for unit tests and future integrations. */
+bool resolver_begin_scope(Resolver *resolver);
+void resolver_end_scope(Resolver *resolver);
+bool resolver_declare(Resolver *resolver, Token name);
+bool resolver_define(Resolver *resolver, Token name);
 
-    void visitBlockStmt(Stmt::Block& stmt) override;
-    void visitClassStmt(Stmt::Class& stmt) override;
-    void visitExpressionStmt(Stmt::Expression& stmt) override;
-    void visitFunctionStmt(Stmt::Function& stmt) override;
-    void visitIfStmt(Stmt::If& stmt) override;
-    void visitPrintStmt(Stmt::Print& stmt) override;
-    void visitReturnStmt(Stmt::Return& stmt) override;
-    void visitVarStmt(Stmt::Var& stmt) override;
-    void visitWhileStmt(Stmt::While& stmt) override;
-};
+/* Error reporting/status. */
+void resolver_error(Resolver *resolver, Token token, const char *message);
+bool resolver_had_error(const Resolver *resolver);
+bool resolver_out_of_memory(const Resolver *resolver);
+
+/*
+ * Read local lexical distance. Returns false for globals or an unresolved node.
+ * The Interpreter must use this data (or a binding sink) when looking up or
+ * assigning variables. Distances are valid while the AST addresses stay valid.
+ */
+bool resolver_get_distance(
+    const Resolver *resolver,
+    const Expr *expression,
+    size_t *distance_out
+);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* RESOLVER_H */

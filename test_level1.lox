@@ -1,0 +1,21 @@
+
+ // TEST 1: Basic expressions and variables
+ // Mục tiêu: kiểm tra token, biểu thức số học, biến, chuỗi, print và phép so sánh
+
+print "=== BASIC TEST ===";
+
+var a = 10;
+var b = 5;
+
+print a + b;
+print a - b;
+print a * b;
+print a / b;
+
+var message = "Hello Lox";
+print message;
+
+print a > b;
+print a == 10;
+print true and false;
+print !false;

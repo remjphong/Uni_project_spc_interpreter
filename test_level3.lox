@@ -1,0 +1,39 @@
+
+ // TEST 3: Functions, recursion and closures
+ // Mục tiêu: kiểm tra hàm, tham số, giá trị trả về, đệ quy, closure và phân giải tên biến
+ 
+print "=== ADVANCED TEST ===";
+
+fun factorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+
+    return n * factorial(n - 1);
+}
+
+print factorial(5);
+
+fun makeCounter() {
+    var count = 0;
+
+    fun increment() {
+        count = count + 1;
+        return count;
+    }
+
+    return increment;
+}
+
+var counter = makeCounter();
+
+print counter();
+print counter();
+print counter();
+
+fun add(a, b) {
+    return a + b;
+}
+
+print add(100, 200);
+print "Advanced test completed";
